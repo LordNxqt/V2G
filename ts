@@ -1,6 +1,4 @@
 
-
-
 local plrs = game:GetService("Players")
 local plr = plrs.LocalPlayer
 local mouse = plr:GetMouse()
@@ -860,13 +858,22 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- antispinner
-plr.CharacterAdded:Connect(function(char)
-    task.wait(1)
-    if toggleStates[AntiSpinner] then
-        for _, v in next, char:GetChildren() do
+local antispinner = false
+
+RunService.Heartbeat:Connect(function()
+    if antispinner then
+        for _, v in next, plr.Character:GetChildren() do
             if v:IsA("BasePart") then
                 v.CustomPhysicalProperties = propy
             end
+        end
+    else
+        for _, v in next, plr.Character:GetDescendants() do
+            pcall(function()
+                if v:IsA("BasePart") then
+                    v.CustomPhysicalProperties = PhysicalProperties.new(0.3, 0.2, 0, 0.2, 0.2)
+                end
+            end)
         end
     end
 end)
@@ -898,8 +905,37 @@ local function applyFakeAccs()
     end
 end
 
--- fling aura
+--antiragdoll
+local antiragdoll = false
 
+RunService.Heartbeat:Connect(function()
+    if not antiragdoll or not plr.Character then return end
+    local char = plr.Character
+
+    pcall (function()
+        if char:FindFirstChild("Ragdoll") and char.Ragdoll.Value then
+            char.GetUpEvent:FireServer()
+        end
+    end)
+
+    for _, v in next, char:GetChildren() do
+        if v.Name == "Stabler" or v.Name == "VelocityDamage" or v.Name == "GetPicked"
+        or v.Name == "ArmAngleUpdate" or v.Name == "ArmAngle" then
+            v:Destroy()
+        end
+    end
+end)
+-- antivoid
+local antivoid = false
+
+plr.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if antivoid then
+        workspace.FallenDestroyHeight = 0/0
+    end
+end)
+
+-- fling aura
 local flingAura = false
 
 RunService.Heartbeat:Connect(function()
@@ -921,39 +957,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-
--- antiragdoll
-local antiragdoll = false
-
-RunService.Heartbeat:Connect(function()
-    if not antiragdoll or not plr.Character then return end
-    local char = plr.Character
-
-    pcall (function()
-        if char:FindFirstChild("Ragdoll") and char.Ragdoll.Value then
-            char.GetUpEvent:FireServer()
-        end
-    end)
-
-    for _, v in next, char:GetChildren() do
-        if v.Name == "Stabler" or v.Name == "VelocityDamage" or v.Name == "GetPicked"
-        or v.Name == "ArmAngleUpdate" or v.Name == "ArmAngle" then
-            v:Destroy()
-        end
-    end
-end)
-
--- antivoid
-local antivoid = false
-
-plr.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    if antivoid then
-        workspace.FallenDestroyHeight = 0/0
-    end
-end)
-
-
 -- lfp
 local flingTextBox = fling
 local loopflingTextBox = loopfling
@@ -964,6 +967,212 @@ local isFlingV2Looping = false
 local flingV2LoopConnections = {}  
 local isHiddenV2Active = false
 
+
+-- autorespawn
+local run = game:GetService("RunService")
+local vim = game:GetService("VirtualInputManager")
+local enb = true
+
+local function r()
+	pcall(function()
+		local b = plr.PlayerGui:WaitForChild("DeathMenu", 5):WaitForChild("Frame", 5):WaitForChild("Button", 5):WaitForChild("TextButton", 5)
+		b.Position = UDim2.new(0, 0, 0, 0)
+		b.Size = UDim2.new(1, 0, 1, 0)
+		b.Text = ''
+		b.BackgroundTransparency = 1
+		b.ZIndex = 2^31 - 1
+		local s = Instance.new("ScreenGui", game.CoreGui)
+		s.IgnoreGuiInset = true
+		s.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+		b.Parent = s
+		local x = b.AbsolutePosition.X + b.AbsoluteSize.X / 2
+		local y = b.AbsolutePosition.Y + b.AbsoluteSize.Y / 2
+		vim:SendMouseButtonEvent(x, y, 0, true, game, 0)
+		vim:SendMouseButtonEvent(x, y, 0, false, game, 0)
+		task.delay(0.5, function() s:Destroy() end)
+	end)
+end
+
+local function c()
+	if enb then
+		run.RenderStepped:Wait()
+		r()
+	end
+end
+
+plr.CharacterAdded:Connect(c)
+
+-- toolstab full
+--[[only oneshoot
+]]
+local UserInputService = game:GetService("UserInputService")
+local char = plr.Character or plr.CharacterAdded:Wait()
+local head = char:WaitForChild("Head")
+local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+local anvils = {}
+local orbitrad = 3.4
+local orbitspeed = 2.2
+local headoffset = 1.6
+local vel = -9e37
+local cm = nil
+local anvilOrbitEnabled = false
+local lowPPEnabled = false
+
+game.Workspace.FallenPartsDestroyHeight = 0/0
+
+local function AddAnv(anvil)
+	table.insert(anvils, anvil)
+	anvil.Parent = workspace
+	anvil.CanCollide = false
+	anvil.Anchored = false
+	anvil.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+	anvil.Velocity = (anvil.Position - head.Position).Unit * vel
+end
+
+local function FindAnvil()
+	anvils = {}
+	for _, v in pairs(workspace:GetChildren()) do
+		if v:IsA("BasePart") and v.Name == "Anvil" and v:FindFirstChild("Script") and v.Script:FindFirstChild("Value") and v.Script.Value.Value == plr then
+			AddAnv(v)
+		end
+	end
+end
+
+local function Positions()
+	if #anvils == 0 or not torso then return end
+	if cm ~= "orbit" and cm ~= "pen" then return end
+
+	local time = tick() * orbitspeed
+	local angleStep = (2 * math.pi) / #anvils
+
+	if cm == "orbit" then
+		for i, anvil in ipairs(anvils) do
+			local angle = time + (i - 1) * angleStep
+			local x = math.cos(angle) * orbitrad
+			local z = math.sin(angle) * orbitrad
+			local pos = head.Position + Vector3.new(x, headoffset, z)
+			anvil.Position = pos
+			anvil.CFrame = CFrame.new(pos, head.Position)
+			anvil.Velocity = (anvil.Position - head.Position).Unit * vel
+		end
+	elseif cm == "pen" then
+		local look = torso.CFrame.LookVector
+		local right = torso.CFrame.RightVector
+		local shaftBase = torso.Position + look * 0.5
+		local shaftY = torso.Position.Y - 1.8
+
+		for i, anvil in ipairs(anvils) do
+			local pos
+			if i == 1 then
+				pos = Vector3.new(
+					shaftBase.X - 0.9 * right.X,
+					shaftY,
+					shaftBase.Z - 0.9 * right.Z
+				)
+			elseif i == 2 then
+				pos = Vector3.new(
+					shaftBase.X + 0.9 * right.X,
+					shaftY,
+					shaftBase.Z + 0.9 * right.Z
+				)
+			else
+				local shaftIndex = i - 2
+				local shaftPos = shaftBase + look * (shaftIndex * 1.2)
+				pos = Vector3.new(shaftPos.X, shaftY, shaftPos.Z)
+			end
+			anvil.Position = pos
+			anvil.CFrame = CFrame.new(pos, pos + look)
+			anvil.Velocity = look * vel
+		end
+	end
+end
+
+game:GetService("RunService").Heartbeat:Connect(Positions)
+
+local function CharAdded(newChar)
+	char = newChar
+	head = char:WaitForChild("Head")
+	torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+	FindAnvil()
+end
+
+plr.CharacterAdded:Connect(CharAdded)
+
+workspace.ChildAdded:Connect(function(c)
+	if c:IsA("BasePart") and c.Name == "Anvil" then
+		AddAnv(c)
+	end
+end)
+
+coroutine.wrap(function()
+	while true do
+		FindAnvil()
+		task.wait()
+	end
+end)()
+--[[ others of oneshoot]]
+-- autoanvilthrow
+local anvilEnabled = false
+local anvilThread
+local characterConnection
+
+local function stopAutoThrow()
+    anvilEnabled = false
+    if anvilThread then
+        anvilThread:Disconnect()
+        anvilThread = nil
+    end
+end
+
+local function activateAnvil()
+    if not anvilEnabled then return end
+
+    local c = 0
+    repeat 
+        RunService.RenderStepped:Wait()
+        c = c + 1
+    until (plr.Character 
+        and plr.Character:FindFirstChild("HumanoidRootPart") 
+        and plr:FindFirstChild("Backpack") 
+        and plr.Backpack:FindFirstChild("Anvil")) 
+        or c >= 200
+
+    if c >= 200 then return end
+
+    local tool = plr.Backpack.Anvil
+    tool.Parent = plr.Character
+    task.wait(0.1)
+    tool:Activate()
+
+    if not plr.Character:FindFirstChild("Anvil") then return end
+
+    local function throwLoop()
+        while anvilEnabled and plr.Character and plr.Character:FindFirstChild("Anvil") do
+            plr.Character.Anvil.send:FireServer(
+                plr.Character.HumanoidRootPart.CFrame.p + Vector3.new(0, -1e8, 0)
+            )
+            task.wait(1)
+            tool.Parent = plr.Backpack
+            task.wait(30)
+            if not anvilEnabled or not plr.Backpack:FindFirstChild("Anvil") then break end
+            tool.Parent = plr.Character
+            task.wait(0.1)
+            tool:Activate()
+        end
+    end
+
+    anvilThread = RunService.Heartbeat:Connect(throwLoop)
+end
+
+characterConnection = plr.CharacterAdded:Connect(function()
+    if anvilEnabled then
+        activateAnvil()
+    end
+end)
+
+if plr.Character then
+    activateAnvil()
+end
 --[[
 Toggle , Button , Textbox]]
 
@@ -1024,21 +1233,7 @@ settoggle(FakeAccs, fccolor3)(function(state)
 end)
 
 settoggle(AntiSpinner, fccolor4)(function(state)
-    if state then
-        for _, v in next, plr.Character:GetChildren() do
-            if v:IsA("BasePart") then
-                v.CustomPhysicalProperties = propy
-            end
-        end
-    else
-        for _, v in next, plr.Character:GetDescendants() do
-            pcall(function()
-                if v:IsA("BasePart") then
-                    v.CustomPhysicalProperties = PhysicalProperties.new(0.3, 0.2, 0, 0.2, 0.2)
-                end
-            end)
-        end
-    end
+    antispinner = state
 end)
 
 settoggle(AntiRagdoll, fccolor5)(function(state)
@@ -1063,6 +1258,7 @@ setbutton(ClearLoop)(function()
     plr.Character.PuttingDown:FireServer()
 end)
 
+
 settoggle(AntiVoid, fccolor7)(function(state)
     antivoid = state
     workspace.FallenDestroyHeight = antivoid and 0/0 or -500
@@ -1073,10 +1269,10 @@ settoggle(FlingAura, fccolor8)(function(state)
     if not state and plr.Character and plr.Character:FindFirstChild("Picked") and plr.Character.Picked.Value then
         plr.Character.PuttingDown:FireServer()
     end
-end))
+end)
 
 settoggle(AutoRespawn, fccolor9)(function(state)
-    print("AutoRespawn toggled:", state)
+    enb = state
 end)
 
 settoggle(Hiddenv2, fccolor10)(function(state)
@@ -1088,7 +1284,12 @@ settoggle(AntiVelocity, fccolor1)(function(state)
 end)
 
 settoggle(AnvilOrbit, fccolor11)(function(state)
-    print("AnvilOrbit toggled:", state)
+	anvilOrbitEnabled = state
+	if anvilOrbitEnabled then
+		cm = "orbit"
+	elseif not lowPPEnabled then
+		cm = nil
+	end
 end)
 
 settoggle(AntiAnvilBreak, fccolor12)(function(state)
@@ -1096,11 +1297,22 @@ settoggle(AntiAnvilBreak, fccolor12)(function(state)
 end)
 
 settoggle(AutoThrow, fccolor14)(function(state)
-    print("AutoThrow toggled:", state)
+    anvilEnabled = state
+
+    if state then
+        activateAnvil()
+    else
+        stopAutoThrow()
+    end
 end)
 
 settoggle(LowPP, fccolor15)(function(state)
-    print("LowPP toggled:", state)
+	lowPPEnabled = state
+	if lowPPEnabled then
+		cm = "pen"
+	elseif not anvilOrbitEnabled then
+		cm = nil
+	end
 end)
 
 settoggle(AnvilDrone, fccolor13)(function(state)
@@ -1111,9 +1323,9 @@ settoggle(LagServer, fccolor16)(function(state)
     print("LagServer toggled:", state)
 end)
 
-settextbox(loopflingTextBox)(function()
-    local input = loopflingTextBox.Text
-    loopflingTextBox.Text = ""
+settextbox(flingTextBox)(function()
+    local input = flingTextBox.Text
+    flingTextBox.Text = ""
 
     local targetPlayer = findplr(input)
     if not targetPlayer or not targetPlayer.Character then return end
@@ -1220,23 +1432,8 @@ settextbox(loopflingv2)(function()
     table.insert(flingV2LoopConnections, conn)
 end)
 
-settextbox(anvilkill)(function(text)
-    print("anvilkill textbox changed:", text)
+settextbox(anvilkill)(function()
 end)
-
-settextbox(orbitheight)(function(text)
-    print("orbitheight changed:", text)
-end)
-
-settextbox(orbitradius)(function(text)
-    print("orbitradius changed:", text)
-end)
-
-settextbox(orbitspeed)(function(text)
-    print("orbitspeed changed:", text)
-end)
-
-
 
 
 local allTabs = {Main, Tools, Global, Misc, Keybinds}
